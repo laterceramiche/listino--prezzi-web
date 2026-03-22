@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gestione Prodotti - CSV + Validazione</title>
+
+  <!-- Materialize CSS -->
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"/>
+
+  <!-- Icone Material -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    body { background: #f5f5f5; }
+    .container { margin-top: 40px; }
+    .sortable { cursor: pointer; }
+    .sortable:hover { color: #1976d2; }
+
+    .sort-icon {
+      font-size: 18px;
+      vertical-align: middle;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .sortable:hover .sort-icon {
+      opacity: 1;
+    }
+
+    .prezzo-col {
+      text-align: right;
+      padding-right: 12px;
+      font-weight: 600;
+      color: #1a237e;
+    }
+
+     .btn, .btn-small {
+  border-radius: 50px !important;
+}	
+    .sorted-col {
+      background-color: rgba(25, 118, 210, 0.12);
+    }
+  </style>
+</head>
+<body>
+
+ <nav class="blue">
+  <div class="nav-wrapper">
+    <div class="center brand-logo" style="font-size: 1.6rem;">
+      Listino Prezzi 
+    </div>
+  </div>
+</nav>
+
+
+
+  <div class="container">
+
+    <!-- TABS -->
+    <div class="row">
+      <div class="col s12">
+        <ul class="tabs">
+          <li class="tab col s6"><a class="active" href="#tabGestione">Gestione prodotto</a></li>
+          <li class="tab col s6"><a href="#tabElenco">Elenco prodotti</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- TAB 1: Gestione prodotto -->
+    <div id="tabGestione" class="col s12">
+      <div class="card">
+        <div class="card-content">
+          <span class="card-title">
+            <i class="material-icons">inventory_2</i>
+            Gestione prodotto
+          </span>
+
+          <form id="productForm">
+            <input type="hidden" id="editIndex" value="-1">
+
+            <div class="row">
+              <div class="input-field col s12 m6">
+                <input id="codice" type="text" required />
+                <label for="codice">Codice</label>
+              </div>
+
+              <div class="input-field col s12 m6">
+                <input id="prodotto" type="text" required />
+                <label for="prodotto">Nome prodotto</label>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="input-field col s12 m6">
+                <i class="material-icons prefix">euro</i>
+                <input id="prezzo" type="text" required />
+                <label for="prezzo">Prezzo</label>
+              </div>
+
+              <div class="input-field col s12 m6">
+                <input id="barcode" type="text" required />
+                <label for="barcode">Barcode</label>
+              </div>
+            </div>
+
+            <div class="row right-align">
+              <button class="btn waves-effect waves-light blue" type="submit">
+                <i class="material-icons left">save</i>
+                Salva
+              </button>
+
+              <button class="btn grey darken-1 waves-effect" type="button" id="btnReset">
+                <i class="material-icons left">clear</i>
+                Reset
+              </button>
+
+              <button class="btn teal waves-effect" type="button" id="btnImportaCSV">
+                <i class="material-icons left">file_upload</i>
+                Importa CSV
+              </button>
+
+              <button class="btn green waves-effect" type="button" id="btnSalvaCSV">
+                <i class="material-icons left">save</i>
+                Salva CSV
+              </button>
+
+              <input type="file" id="fileCSV" accept=".csv" style="display:none;">
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Elenco prodotti -->
+    <div id="tabElenco" class="col s12">
+      <div class="card">
+        <div class="card-content">
+          <span class="card-title">
+            <i class="material-icons">list</i>
+            Elenco prodotti
+          </span>
+
+          <div class="row">
+            <div class="input-field col s12">
+              <i class="material-icons prefix">search</i>
+              <input type="text" id="searchInput">
+              <label for="searchInput">Cerca prodotto...</label>
+            </div>
+          </div>
+
+          <table class="highlight responsive-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="codice">
+                  Codice <i class="material-icons sort-icon" data-col="codice">unfold_more</i>
+                </th>
+                <th class="sortable" data-sort="prodotto">
+                  Prodotto <i class="material-icons sort-icon" data-col="prodotto">unfold_more</i>
+                </th>
+                <th class="sortable prezzo-col" data-sort="prezzo">
+                  Prezzo <i class="material-icons sort-icon" data-col="prezzo">unfold_more</i>
+                </th>
+                <th class="sortable" data-sort="barcode">
+                  Barcode <i class="material-icons sort-icon" data-col="barcode">unfold_more</i>
+                </th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="productsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Materialize JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      M.Tabs.init(document.querySelectorAll('.tabs'));
+      M.updateTextFields();
+
+      let prodotti = [];
+
+      const tbody = document.getElementById("productsTableBody");
+      const form = document.getElementById("productForm");
+      const prezzoInput = document.getElementById("prezzo");
+      const searchInput = document.getElementById("searchInput");
+
+      /* ------------------------------
+         VALIDAZIONE + FORMATTAZIONE PREZZO
+      ------------------------------ */
+
+      function normalizzaPrezzo(v) {
+        if (!v) return null;
+
+        v = v.replace(/\s+/g, "");
+        v = v.replace(".", ",");
+        v = v.replace(/[^0-9,]/g, "");
+
+        if (v.split(",").length > 2) return null;
+
+        if (!v.includes(",")) v += ",00";
+
+        let [intPart, decPart] = v.split(",");
+
+        if (!/^\d+$/.test(intPart)) return null;
+
+        if (!decPart) decPart = "00";
+        if (decPart.length === 1) decPart += "0";
+        if (!/^\d{2}$/.test(decPart)) return null;
+
+        intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+        return `${intPart},${decPart}`;
+      }
+      /* ------------------------------
+         VALIDAZIONE CAMPI FORM
+      ------------------------------ */
+
+      function validaProdotto(p, index = -1) {
+        if (!p.codice || p.codice.length < 1)
+          return "Il codice è obbligatorio.";
+
+        if (!p.prodotto || p.prodotto.length < 1)
+          return "Il nome prodotto è obbligatorio.";
+
+        if (!p.prezzo)
+          return "Il prezzo è obbligatorio.";
+
+        const prezzoOK = normalizzaPrezzo(p.prezzo);
+        if (!prezzoOK)
+          return "Prezzo non valido. Usa il formato 12,50.";
+
+        p.prezzo = prezzoOK;
+
+        if (!/^\d+$/.test(p.barcode))
+          return "Il barcode deve contenere solo numeri.";
+
+        const duplicatoCodice = prodotti.findIndex((x, i) => x.codice === p.codice && i !== index);
+        if (duplicatoCodice >= 0)
+          return "Codice già esistente.";
+
+        const duplicatoBarcode = prodotti.findIndex((x, i) => x.barcode === p.barcode && i !== index);
+        if (duplicatoBarcode >= 0)
+          return "Barcode già esistente.";
+
+        return null;
+      }
+
+      /* ------------------------------
+         EVENTO SUBMIT FORM
+      ------------------------------ */
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const nuovo = {
+          codice: document.getElementById("codice").value.trim(),
+          prodotto: document.getElementById("prodotto").value.trim(),
+          prezzo: document.getElementById("prezzo").value.trim(),
+          barcode: document.getElementById("barcode").value.trim()
+        };
+
+        const editIndex = parseInt(document.getElementById("editIndex").value);
+
+        const errore = validaProdotto(nuovo, editIndex);
+        if (errore) {
+          M.toast({ html: errore, classes: "red" });
+          return;
+        }
+
+        if (editIndex >= 0) {
+          prodotti[editIndex] = nuovo;
+          M.toast({ html: "Prodotto modificato", classes: "orange" });
+        } else {
+          prodotti.push(nuovo);
+          M.toast({ html: "Prodotto aggiunto", classes: "green" });
+        }
+
+        renderTabella();
+        form.reset();
+        document.getElementById("editIndex").value = -1;
+        M.updateTextFields();
+      });
+
+      document.getElementById("btnReset").addEventListener("click", () => {
+        form.reset();
+        document.getElementById("editIndex").value = -1;
+        M.updateTextFields();
+      });
+
+      /* ------------------------------
+         RENDER TABELLA
+      ------------------------------ */
+
+      function renderTabella(lista = prodotti) {
+        tbody.innerHTML = "";
+
+        lista.forEach((p, index) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${p.codice}</td>
+            <td>${p.prodotto}</td>
+            <td class="prezzo-col">€ ${p.prezzo}</td>
+            <td>${p.barcode}</td>
+            <td>
+              <button class="btn-small orange" data-action="edit" data-index="${index}">
+                <i class="material-icons">edit</i>
+              </button>
+              <button class="btn-small red" data-action="delete" data-index="${index}">
+                <i class="material-icons">delete</i>
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        evidenziaColonnaOrdinata();
+      }
+
+      /* ------------------------------
+         MODIFICA / ELIMINA
+      ------------------------------ */
+
+      tbody.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+        const index = parseInt(btn.dataset.index);
+
+        if (action === "edit") modifica(index);
+        if (action === "delete") elimina(index);
+      });
+
+      function modifica(index) {
+        const p = prodotti[index];
+
+        document.getElementById("codice").value = p.codice;
+        document.getElementById("prodotto").value = p.prodotto;
+        document.getElementById("prezzo").value = p.prezzo;
+        document.getElementById("barcode").value = p.barcode;
+        document.getElementById("editIndex").value = index;
+
+        M.updateTextFields();
+        M.toast({ html: "Modifica in corso...", classes: "blue" });
+
+        const tabs = M.Tabs.getInstance(document.querySelector('.tabs'));
+        tabs.select('tabGestione');
+      }
+
+      function elimina(index) {
+        prodotti.splice(index, 1);
+        renderTabella();
+        M.toast({ html: "Prodotto eliminato", classes: "red" });
+      }
+
+      /* ------------------------------
+         RICERCA
+      ------------------------------ */
+
+      searchInput.addEventListener("input", function () {
+        const query = this.value.toLowerCase();
+        const filtered = prodotti.filter(p =>
+          p.codice.toLowerCase().includes(query) ||
+          p.prodotto.toLowerCase().includes(query) ||
+          p.prezzo.toLowerCase().includes(query) ||
+          p.barcode.toLowerCase().includes(query)
+        );
+        renderTabella(filtered);
+      });
+
+      /* ------------------------------
+         ORDINAMENTO
+      ------------------------------ */
+
+      let sortColumn = null;
+      let sortDirection = 1;
+
+      document.querySelectorAll(".sortable").forEach(th => {
+        th.addEventListener("click", () => {
+          const column = th.dataset.sort;
+
+          if (sortColumn === column) sortDirection *= -1;
+          else {
+            sortColumn = column;
+            sortDirection = 1;
+          }
+
+          aggiornaIconeOrdinamento();
+          ordinaProdotti();
+        });
+      });
+
+      function aggiornaIconeOrdinamento() {
+        document.querySelectorAll(".sort-icon").forEach(icon => {
+          const col = icon.dataset.col;
+
+          if (col !== sortColumn) {
+            icon.textContent = "unfold_more";
+            return;
+          }
+
+          icon.textContent = sortDirection === 1 ? "arrow_upward" : "arrow_downward";
+        });
+      }
+
+      function evidenziaColonnaOrdinata() {
+        document.querySelectorAll("td, th").forEach(cell => {
+          cell.classList.remove("sorted-col");
+        });
+
+        const colIndex = {
+          codice: 0,
+          prodotto: 1,
+          prezzo: 2,
+          barcode: 3
+        }[sortColumn];
+
+        if (colIndex === undefined) return;
+
+        document.querySelectorAll("table tr").forEach(row => {
+          const cell = row.children[colIndex];
+          if (cell) cell.classList.add("sorted-col");
+        });
+      }
+
+      function ordinaProdotti() {
+        let lista = [...prodotti];
+
+        if (!sortColumn) {
+          renderTabella(lista);
+          return;
+        }
+
+        lista.sort((a, b) => {
+          let v1 = a[sortColumn].toString().toLowerCase();
+          let v2 = b[sortColumn].toString().toLowerCase();
+
+          if (sortColumn === "prezzo") {
+            v1 = parseFloat(v1.replace(/\./g, "").replace(",", "."));
+            v2 = parseFloat(v2.replace(/\./g, "").replace(",", "."));
+            return (v1 - v2) * sortDirection;
+          }
+
+          if (v1 < v2) return -1 * sortDirection;
+          if (v1 > v2) return 1 * sortDirection;
+          return 0;
+        });
+
+        renderTabella(lista);
+      }
+
+      /* ------------------------------
+         IMPORT CSV + VALIDAZIONE
+      ------------------------------ */
+
+      document.getElementById("btnImportaCSV").addEventListener("click", () => {
+        document.getElementById("fileCSV").click();
+      });
+
+      document.getElementById("fileCSV").addEventListener("change", function () {
+        const file = this.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+          const lines = e.target.result.split("\n").map(l => l.trim()).filter(l => l);
+
+          if (lines.length < 2) {
+            M.toast({ html: "CSV vuoto o non valido", classes: "red" });
+            return;
+          }
+
+          const nuovi = [];
+
+          for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(";");
+
+            if (row.length !== 4) {
+              M.toast({ html: `Riga ${i + 1} non valida`, classes: "red" });
+              continue;
+            }
+
+            let [codice, prodotto, prezzo, barcode] = row.map(x => x.trim());
+
+            const p = { codice, prodotto, prezzo, barcode };
+
+            const errore = validaProdotto(p);
+            if (errore) {
+              M.toast({ html: `Errore riga ${i + 1}: ${errore}`, classes: "red" });
+              continue;
+            }
+
+            nuovi.push(p);
+          }
+
+          prodotti = nuovi;
+          renderTabella();
+          M.toast({ html: "CSV importato correttamente", classes: "green" });
+        };
+
+        reader.readAsText(file);
+      });
+
+      /* ------------------------------
+         SALVA CSV
+      ------------------------------ */
+
+      document.getElementById("btnSalvaCSV").addEventListener("click", () => {
+        let csv = "codice;prodotto;prezzo;barcode\n";
+
+        prodotti.forEach(p => {
+          csv += `${p.codice};${p.prodotto};${p.prezzo};${p.barcode}\n`;
+        });
+
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "prodotti.csv";
+        a.click();
+
+        URL.revokeObjectURL(url);
+
+        M.toast({ html: "CSV salvato", classes: "blue" });
+      });
+
+    });
+  </script>
+
+</body>
+</html>
